@@ -1,7 +1,8 @@
 {
   "name": "Workout Tracker — Miatta & Boris",
   "short_name": "Workout",
-  "start_url": "/",
+  "start_url": "/Workout-Tracker/",
+  "scope": "/Workout-Tracker/",
   "display": "standalone",
   "background_color": "#0c0c10",
   "theme_color": "#0c0c10",
