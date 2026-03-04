@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Workout">
+<meta name="theme-color" content="#0c0c10">
+<title>💪 Workout Tracker</title>
+<link rel="manifest" href="manifest.json">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg: #0c0c10;
+  --s1: #13131a;
+  --s2: #1a1a24;
+  --border: #222230;
+  --muted: #55556a;
+  --text: #e8e8f0;
+  --accent: #c8ff00;
+  --miatta: #ff6b9d;
+  --boris: #4fc3f7;
+  --danger: #ff4466;
+  --r: 10px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; overflow: hidden; }
+body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; }
+
+/* HEADER */
+.hdr { background: var(--s1); border-bottom: 1px solid var(--border); padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.hdr-title { font-size: 17px; font-weight: 700; }
+.hdr-title span { color: var(--accent); }
+.hdr-sync { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+.sync-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+.sync-dot.ok { background: var(--accent); }
+.sync-dot.err { background: var(--danger); }
+.sync-dot.loading { background: #ffaa00; animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* TABS */
+.tabs { display: flex; background: var(--s1); border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; flex-shrink: 0; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { flex-shrink: 0; padding: 11px 15px; font-size: 11px; font-weight: 700; letter-spacing: 0.4px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; background: none; border-top: none; border-left: none; border-right: none; font-family: inherit; white-space: nowrap; transition: color 0.15s; }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab.tm.active { color: var(--miatta); border-bottom-color: var(--miatta); }
+.tab.tb.active { color: var(--boris); border-bottom-color: var(--boris); }
+
+/* SCROLL AREA */
+.scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.panel { display: none; padding: 14px; padding-bottom: 32px; }
+.panel.active { display: block; }
+
+/* CARD */
+.card { background: var(--s1); border: 1px solid var(--border); border-radius: var(--r); padding: 14px; margin-bottom: 12px; }
+.card-title { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 12px; }
+
+/* FORM */
+.fg { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.fg:last-child { margin-bottom: 0; }
+label { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.5px; text-transform: uppercase; }
+select, input[type=text], input[type=number], input[type=date] {
+  width: 100%; background: var(--s2); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text); padding: 10px 12px; font-family: 'DM Sans', sans-serif; font-size: 14px;
+  outline: none; appearance: none; -webkit-appearance: none; transition: border-color 0.15s;
+}
+select:focus, input:focus { border-color: var(--accent); }
+select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%2355556a' d='M5 7L0 2h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.btn { width: 100%; background: var(--accent); color: #000; border: none; border-radius: 7px; padding: 12px; font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 14px; cursor: pointer; margin-top: 10px; transition: opacity 0.15s; }
+.btn:active { opacity: 0.8; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ADD SET BUTTON */
+.btn-add-set {
+  width: 100%; background: transparent; color: var(--accent); border: 2px dashed var(--accent);
+  border-radius: 7px; padding: 11px; font-family: 'DM Sans', sans-serif; font-weight: 700;
+  font-size: 13px; cursor: pointer; margin-top: 8px; transition: background 0.15s, color 0.15s;
+  letter-spacing: 0.3px;
+}
+.btn-add-set:active { background: rgba(200,255,0,0.08); }
+
+/* SET ROWS */
+.set-rows { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.set-row { display: grid; gap: 6px; align-items: center; background: var(--s2); border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px; }
+.set-row.strength-row { grid-template-columns: 36px 1fr 1fr 1fr auto; }
+.set-row.cardio-row  { grid-template-columns: 36px 1fr 1fr auto; }
+.set-nr { font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 700; color: var(--muted); text-align: center; }
+.set-row input { padding: 7px 9px; font-size: 13px; background: var(--bg); border-color: var(--border); }
+.set-row input:focus { border-color: var(--accent); }
+.set-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 4px 6px; border-radius: 5px; line-height: 1; transition: color 0.15s, background 0.15s; flex-shrink: 0; }
+.set-del:hover, .set-del:active { color: var(--danger); background: rgba(255,68,102,0.12); }
+
+/* TABLE */
+.tscroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -14px; padding: 0 14px; }
+table { width: 100%; border-collapse: collapse; font-family: 'DM Mono', monospace; font-size: 11px; min-width: 500px; }
+th { background: var(--s2); color: var(--muted); font-size: 10px; letter-spacing: 0.5px; text-transform: uppercase; padding: 8px 8px; text-align: left; border-bottom: 1px solid var(--border); font-family: 'DM Sans', sans-serif; }
+td { padding: 9px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+.vol { color: var(--accent); font-weight: 500; }
+
+/* DELETE BUTTON IN TABLE — now clearly visible */
+.delbtn {
+  background: rgba(255,68,102,0.1);
+  border: 1px solid rgba(255,68,102,0.25);
+  color: var(--danger);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 5px;
+  line-height: 1;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.delbtn:hover, .delbtn:active { background: rgba(255,68,102,0.25); border-color: var(--danger); }
+
+.badge { display: inline-block; padding: 2px 7px; border-radius: 20px; font-size: 10px; font-weight: 700; font-family: 'DM Sans', sans-serif; }
+.bm { background: rgba(255,107,157,0.15); color: var(--miatta); }
+.bb { background: rgba(79,195,247,0.15); color: var(--boris); }
+
+/* STATS */
+.stats { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.stat { background: var(--s2); border: 1px solid var(--border); border-radius: 20px; padding: 5px 12px; font-size: 11px; }
+.stat strong { color: var(--accent); font-family: 'DM Mono', monospace; }
+
+/* EMPTY */
+.empty { text-align: center; padding: 28px 16px; color: var(--muted); font-size: 13px; }
+.empty .ico { font-size: 28px; margin-bottom: 8px; }
+
+
+
+/* PAGINATION */
+.pagination { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 14px; flex-wrap: wrap; }
+.pg-btn { background: var(--s2); border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 6px 11px; font-family: 'DM Mono', monospace; font-size: 12px; cursor: pointer; transition: all 0.15s; }
+.pg-btn:hover { border-color: var(--accent); color: var(--accent); }
+.pg-btn.active { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 700; }
+.pg-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.pg-info { font-size: 11px; color: var(--muted); padding: 0 4px; }
+
+
+/* PREVIOUS SESSION HINT */
+.prev-session { background: var(--s2); border: 1px solid var(--border); border-radius: 7px; padding: 10px 12px; margin-top: 8px; display: none; }
+.prev-session.visible { display: block; }
+.prev-session-title { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 8px; }
+.prev-session-date { font-size: 11px; color: var(--muted); margin-bottom: 6px; font-family: 'DM Mono', monospace; }
+.prev-set-row { display: flex; gap: 10px; align-items: center; font-family: 'DM Mono', monospace; font-size: 12px; padding: 3px 0; border-bottom: 1px solid var(--border); }
+.prev-set-row:last-child { border-bottom: none; }
+.prev-set-nr { color: var(--muted); font-size: 11px; min-width: 28px; }
+.prev-set-kg { color: var(--accent); font-weight: 600; }
+.prev-set-reps { color: var(--text); }
+.prev-set-km { color: var(--accent); font-weight: 600; }
+
+/* DATE GROUP (accordion) */
+.date-group-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 8px; background: var(--s2); cursor: pointer;
+  border-bottom: 1px solid var(--border); user-select: none;
+}
+.date-group-header:hover { background: #1f1f2e; }
+.date-group-label { font-size: 12px; font-weight: 700; color: var(--text); font-family: 'DM Mono', monospace; }
+.date-group-meta { font-size: 11px; color: #9999b5; margin-left: 8px; }
+.date-group-arrow { font-size: 11px; color: var(--muted); transition: transform 0.2s; }
+.date-group-arrow.open { transform: rotate(90deg); }
+.date-group-rows { display: none; }
+.date-group-rows.open { display: table-row-group; }
+
+/* PR TABLE */
+.cat-row td { background: var(--s2); color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; padding: 6px 8px; }
+
+/* EXERCISE LIST */
+.ex-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ex-cat { background: var(--s1); border: 1px solid var(--border); border-radius: var(--r); padding: 12px; }
+.ex-cat-title { font-size: 10px; font-weight: 700; color: var(--accent); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+.ex-item { font-size: 12px; padding: 3px 0; display: flex; justify-content: space-between; align-items: center; gap: 4px; border-bottom: 1px solid var(--border); }
+.ex-item:last-of-type { border-bottom: none; }
+.ex-add { display: flex; gap: 5px; margin-top: 8px; }
+.ex-add input { flex: 1; font-size: 12px; padding: 7px 9px; }
+.ex-add button { background: var(--accent); color: #000; border: none; border-radius: 6px; padding: 7px 10px; font-weight: 700; font-size: 13px; cursor: pointer; flex-shrink: 0; }
+
+/* TOAST */
+.toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--accent); color: #000; padding: 10px 20px; border-radius: 20px; font-weight: 700; font-size: 13px; z-index: 9999; transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1); white-space: nowrap; pointer-events: none; }
+.toast.show { transform: translateX(-50%) translateY(0); }
+
+/* LOADING OVERLAY */
+.loading-overlay { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; z-index: 100; transition: opacity 0.4s; }
+.loading-overlay.hidden { opacity: 0; pointer-events: none; }
+.spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* CONFIG SCREEN */
+.config-screen { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; z-index: 200; }
+.config-screen.hidden { display: none; }
+.config-logo { font-size: 48px; margin-bottom: 16px; }
+.config-title { font-size: 22px; font-weight: 700; margin-bottom: 6px; text-align: center; }
+.config-title span { color: var(--accent); }
+.config-sub { font-size: 13px; color: var(--muted); margin-bottom: 28px; text-align: center; line-height: 1.5; }
+.config-label { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 6px; display: block; width: 100%; max-width: 400px; }
+.config-input { width: 100%; max-width: 400px; background: var(--s2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 12px 14px; font-family: 'DM Mono', monospace; font-size: 13px; outline: none; margin-bottom: 16px; }
+.config-input:focus { border-color: var(--accent); }
+.config-btn { width: 100%; max-width: 400px; background: var(--accent); color: #000; border: none; border-radius: 8px; padding: 13px; font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 15px; cursor: pointer; }
+.config-hint { font-size: 11px; color: var(--muted); margin-top: 14px; text-align: center; line-height: 1.6; max-width: 340px; }
+
+@media (max-width: 380px) {
+  .ex-grid { grid-template-columns: 1fr; }
+  .grid3 { grid-template-columns: 1fr 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- CONFIG SCREEN -->
+<div class="config-screen" id="configScreen">
+  <div class="config-logo">💪</div>
+  <div class="config-title">Workout <span>Tracker</span></div>
+  <div class="config-sub">Plak je Google Apps Script URL hieronder om je gedeelde data te koppelen.</div>
+  <label class="config-label">Google Apps Script URL</label>
+  <input class="config-input" id="scriptUrlInput" type="url" placeholder="https://script.google.com/macros/s/..." />
+  <button class="config-btn" onclick="saveConfig()">Verbinden & Starten</button>
+  <div class="config-hint">Je hoeft dit maar één keer in te voeren.<br>Jij en Boris plakken dezelfde URL.</div>
+</div>
+
+<!-- LOADING -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div style="font-size:13px;color:var(--muted)">Laden...</div>
+</div>
+
+<!-- APP -->
+<div class="hdr">
+  <div class="hdr-title">💪 Workout <span>Tracker</span></div>
+  <div class="hdr-sync">
+    <div class="sync-dot" id="syncDot"></div>
+    <span id="syncLabel">—</span>
+    <button onclick="refreshAll()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 4px;margin-left:2px;">↻</button>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab tm active" onclick="showTab('miatta')">📋 Miatta</button>
+  <button class="tab tb" onclick="showTab('boris')">📋 Boris</button>
+  <button class="tab" onclick="showTab('both')">👥 Alle Logs</button>
+  <button class="tab" onclick="showTab('records')">🏆 Records</button>
+  <button class="tab" onclick="showTab('progress')">📈 Progress</button>
+  <button class="tab" onclick="showTab('exercises')">🏋 Oefeningen</button>
+</div>
+
+<div class="scroll">
+
+  <!-- MIATTA LOG -->
+  <div id="tab-miatta" class="panel active">
+    <div class="card">
+      <div class="card-title">Nieuwe Entry — <span style="color:var(--miatta)">Miatta</span></div>
+      <div class="fg"><label>Categorie</label><select id="m-cat" onchange="onCatChange('m')"></select></div>
+      <div class="fg"><label>Oefening</label><select id="m-ex" onchange="showPrevSession('m')"></select></div>
+      <div class="prev-session" id="m-prev-session"></div>
+      <div class="fg"><label>Datum</label><input type="date" id="m-date"></div>
+      <!-- Set rows container -->
+      <div class="set-rows" id="m-set-rows"></div>
+      <button class="btn-add-set" onclick="addSetRow('m')">+ Set toevoegen</button>
+      <button class="btn" id="m-btn" onclick="saveAllSets('miatta')">💾 Opslaan</button>
+    </div>
+    <div class="card">
+      <div class="card-title">Log — Miatta</div>
+      <div class="stats" id="m-stats"></div>
+      <div class="tscroll"><table><thead><tr><th>Datum</th><th>Cat</th><th>Oefening</th><th>Set</th><th>Reps</th><th>Kg</th><th>Vol</th><th>Km</th><th>Min</th><th>📝</th><th></th></tr></thead><tbody id="m-tbody"></tbody></table></div>
+      <div class="empty" id="m-empty"><div class="ico">📝</div>Nog geen entries!</div>
+    </div>
+  </div>
+
+  <!-- BORIS LOG -->
+  <div id="tab-boris" class="panel">
+    <div class="card">
+      <div class="card-title">Nieuwe Entry — <span style="color:var(--boris)">Boris</span></div>
+      <div class="fg"><label>Categorie</label><select id="b-cat" onchange="onCatChange('b')"></select></div>
+      <div class="fg"><label>Oefening</label><select id="b-ex" onchange="showPrevSession('b')"></select></div>
+      <div class="prev-session" id="b-prev-session"></div>
+      <div class="fg"><label>Datum</label><input type="date" id="b-date"></div>
+      <div class="set-rows" id="b-set-rows"></div>
+      <button class="btn-add-set" onclick="addSetRow('b')">+ Set toevoegen</button>
+      <button class="btn" id="b-btn" onclick="saveAllSets('boris')">💾 Opslaan</button>
+    </div>
+    <div class="card">
+      <div class="card-title">Log — Boris</div>
+      <div class="stats" id="b-stats"></div>
+      <div class="tscroll"><table><thead><tr><th>Datum</th><th>Cat</th><th>Oefening</th><th>Set</th><th>Reps</th><th>Kg</th><th>Vol</th><th>Km</th><th>Min</th><th>📝</th><th></th></tr></thead><tbody id="b-tbody"></tbody></table></div>
+      <div class="empty" id="b-empty"><div class="ico">📝</div>Nog geen entries!</div>
+    </div>
+  </div>
+
+  <!-- ALL LOGS -->
+  <div id="tab-both" class="panel">
+    <div class="card">
+      <div class="card-title">👥 Alle Logs — Miatta & Boris</div>
+      <div class="tscroll"><table><thead><tr><th>Datum</th><th>Persoon</th><th>Cat</th><th>Oefening</th><th>Set</th><th>Reps</th><th>Kg</th><th>Vol</th><th>Km</th><th>Min</th><th></th></tr></thead><tbody id="all-tbody"></tbody></table></div>
+      <div class="empty" id="all-empty"><div class="ico">📝</div>Nog geen entries!</div>
+      <div class="pagination" id="all-pagination"></div>
+    </div>
+  </div>
+
+  <!-- RECORDS -->
+  <div id="tab-records" class="panel">
+    <div class="card">
+      <div class="card-title">🏆 Personal Records — hoogste gewicht per oefening</div>
+      <div class="tscroll">
+        <table>
+          <thead><tr><th>Oefening</th><th style="color:var(--miatta)">Miatta</th><th style="color:var(--boris)">Boris</th></tr></thead>
+          <tbody id="pr-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROGRESS -->
+  <div id="tab-progress" class="panel">
+    <div class="card">
+      <div class="card-title">📈 Progress</div>
+      <div class="grid3" style="margin-bottom:12px">
+        <div class="fg" style="margin:0"><label>Persoon</label>
+          <select id="prog-person" onchange="onProgPersonChange()">
+            <option value="miatta">Miatta</option>
+            <option value="boris">Boris</option>
+          </select>
+        </div>
+        <div class="fg" style="margin:0"><label>Categorie</label>
+          <select id="prog-cat" onchange="onProgCatChange()">
+            <option value="">Alle</option>
+          </select>
+        </div>
+        <div class="fg" style="margin:0"><label>Oefening</label><select id="prog-ex" onchange="renderProgress()"></select></div>
+      </div>
+      <!-- Charts -->
+      <div id="prog-charts-wrap" style="display:none; margin-bottom:16px;">
+        <div style="margin-bottom:6px;">
+          <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px;">Zwaarste gewicht per sessie</div>
+          <canvas id="prog-chart-weight" height="160"></canvas>
+        </div>
+        <div style="margin-top:14px;">
+          <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px;">Reps op zwaarste gewicht</div>
+          <canvas id="prog-chart-reps" height="160"></canvas>
+        </div>
+      </div>
+      <div class="tscroll">
+        <table><thead><tr><th>Datum</th><th>Set</th><th>Reps</th><th>Kg</th></tr></thead><tbody id="prog-tbody"></tbody></table>
+      </div>
+      <div class="empty" id="prog-empty"><div class="ico">📈</div>Geen data voor deze selectie.</div>
+    </div>
+  </div>
+
+  <!-- EXERCISES -->
+  <div id="tab-exercises" class="panel">
+    <div class="card">
+      <div class="card-title">🏋 Oefeningen — voeg toe of verwijder</div>
+      <div class="ex-grid" id="ex-grid"></div>
+    </div>
+  </div>
+
+</div><!-- end .scroll -->
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── CONFIG ───────────────────────────────────────────────────
+const CFG_KEY = 'wt_script_url';
+let SCRIPT_URL = localStorage.getItem(CFG_KEY) || '';
+
+function saveConfig() {
+  const url = document.getElementById('scriptUrlInput').value.trim();
+  if (!url.startsWith('https://script.google.com')) { alert('Plak een geldige Google Apps Script URL.'); return; }
+  SCRIPT_URL = url;
+  localStorage.setItem(CFG_KEY, url);
+  document.getElementById('configScreen').classList.add('hidden');
+  init();
+}
+
+// ── STATE ────────────────────────────────────────────────────
+let logs = [];
+let exercises = {};
+const CATS = ['Chest','Shoulders','Arms','Back','Glutes','Legs','Abs','Cardio'];
+
+// ── API ──────────────────────────────────────────────────────
+async function api(params) {
+  setSyncStatus('loading');
+  try {
+    let url, opts;
+    if (params.action === 'getLogs' || params.action === 'getExercises') {
+      url = SCRIPT_URL + '?action=' + params.action;
+      opts = { method: 'GET' };
+    } else {
+      url = SCRIPT_URL;
+      opts = { method: 'POST', body: JSON.stringify(params) };
+    }
+    const res = await fetch(url, opts);
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error);
+    setSyncStatus('ok');
+    return json.data;
+  } catch(e) {
+    setSyncStatus('err');
+    throw e;
+  }
+}
+
+function setSyncStatus(status) {
+  const dot = document.getElementById('syncDot');
+  const lbl = document.getElementById('syncLabel');
+  dot.className = 'sync-dot ' + status;
+  lbl.textContent = status === 'ok' ? 'Gesynchroniseerd' : status === 'loading' ? 'Laden...' : 'Fout';
+}
+
+// ── INIT ─────────────────────────────────────────────────────
+async function init() {
+  const overlay = document.getElementById('loadingOverlay');
+  overlay.classList.remove('hidden');
+  try {
+    const [l, e] = await Promise.all([api({ action: 'getLogs' }), api({ action: 'getExercises' })]);
+    logs = l || [];
+    exercises = e || {};
+    initForms();
+    renderAll();
+  } catch(err) {
+    showToast('Verbindingsfout. Controleer je URL.');
+  }
+  overlay.classList.add('hidden');
+}
+
+async function refreshAll() {
+  try {
+    const [l, e] = await Promise.all([api({ action: 'getLogs' }), api({ action: 'getExercises' })]);
+    logs = l || [];
+    exercises = e || {};
+    renderAll();
+    showToast('✓ Ververst!');
+  } catch { showToast('Fout bij verversen'); }
+}
+
+function renderAll() {
+  renderLog('miatta');
+  renderLog('boris');
+  renderAllLogs();
+  renderRecords();
+  renderProgress();
+  renderExercises();
+}
+
+// ── FORMS ────────────────────────────────────────────────────
+const today = () => new Date().toISOString().split('T')[0];
+
+function initForms() {
+  ['m','b'].forEach(p => {
+    const cat = document.getElementById(p + '-cat');
+    cat.innerHTML = CATS.map(c => `<option value="${c}">${c}</option>`).join('');
+    document.getElementById(p + '-date').value = today();
+    onCatChange(p);
+    // Start with 1 set row
+    const container = document.getElementById(p + '-set-rows');
+    container.innerHTML = '';
+    addSetRow(p);
+  });
+}
+
+function onCatChange(p) {
+  const cat = document.getElementById(p + '-cat').value;
+  const exSel = document.getElementById(p + '-ex');
+  const exList = (exercises[cat] || []).slice().sort((a,b) => a.localeCompare(b));
+  exSel.innerHTML = exList.map(e => `<option value="${esc(e)}">${esc(e)}</option>`).join('');
+  // Re-render set rows to match cardio/strength
+  const container = document.getElementById(p + '-set-rows');
+  const count = container.querySelectorAll('.set-row').length || 1;
+  container.innerHTML = '';
+  for (let i = 0; i < count; i++) addSetRow(p);
+  showPrevSession(p);
+}
+
+// ── MULTI-SET ROWS ───────────────────────────────────────────
+function addSetRow(p) {
+  const cat = document.getElementById(p + '-cat').value;
+  const isCardio = cat === 'Cardio';
+  const container = document.getElementById(p + '-set-rows');
+  const setNr = container.querySelectorAll('.set-row').length + 1;
+
+  const row = document.createElement('div');
+  row.className = 'set-row ' + (isCardio ? 'cardio-row' : 'strength-row');
+  row.dataset.setNr = setNr;
+
+  if (isCardio) {
+    row.innerHTML = `
+      <span class="set-nr">${setNr}</span>
+      <input type="number" placeholder="Km" step="0.1" min="0" class="sr-km">
+      <input type="number" placeholder="Min" min="0" class="sr-min">
+      <button class="set-del" onclick="removeSetRow(this, '${p}')">✕</button>`;
+  } else {
+    row.innerHTML = `
+      <span class="set-nr">${setNr}</span>
+      <input type="number" placeholder="Reps" min="0" class="sr-reps">
+      <input type="number" placeholder="Kg" step="0.5" min="0" class="sr-weight">
+      <input type="text" placeholder="Notities" class="sr-notes">
+      <button class="set-del" onclick="removeSetRow(this, '${p}')">✕</button>`;
+  }
+
+  container.appendChild(row);
+  // Focus first input of new row
+  const first = row.querySelector('input');
+  if (first && container.querySelectorAll('.set-row').length > 1) first.focus();
+}
+
+function removeSetRow(btn, p) {
+  const container = document.getElementById(p + '-set-rows');
+  const rows = container.querySelectorAll('.set-row');
+  if (rows.length <= 1) { showToast('Minimaal 1 set vereist'); return; }
+  btn.closest('.set-row').remove();
+  // Renumber
+  container.querySelectorAll('.set-row').forEach((r, i) => {
+    r.dataset.setNr = i + 1;
+    r.querySelector('.set-nr').textContent = i + 1;
+  });
+}
+
+// ── SAVE ALL SETS ────────────────────────────────────────────
+async function saveAllSets(person) {
+  const p = person === 'miatta' ? 'm' : 'b';
+  const cat      = document.getElementById(p + '-cat').value;
+  const exercise = document.getElementById(p + '-ex').value;
+  const date     = document.getElementById(p + '-date').value;
+  if (!exercise || !date) { showToast('Vul datum en oefening in!'); return; }
+
+  const isCardio = cat === 'Cardio';
+  const container = document.getElementById(p + '-set-rows');
+  const rows = container.querySelectorAll('.set-row');
+
+  const entries = [];
+  rows.forEach((row, i) => {
+    const setNr = i + 1;
+    if (isCardio) {
+      const km  = parseFloat(row.querySelector('.sr-km')?.value)  || 0;
+      const min = parseFloat(row.querySelector('.sr-min')?.value) || 0;
+      entries.push({ id: Date.now() + i, person, date, cat, exercise, setNr, reps: 0, weight: 0, volume: 0, km, min, notes: '' });
+    } else {
+      const reps   = parseFloat(row.querySelector('.sr-reps')?.value)   || 0;
+      const weight = parseFloat(row.querySelector('.sr-weight')?.value) || 0;
+      const notes  = row.querySelector('.sr-notes')?.value || '';
+      entries.push({ id: Date.now() + i, person, date, cat, exercise, setNr, reps, weight, volume: reps * weight, km: 0, min: 0, notes });
+    }
+  });
+
+  const btn = document.getElementById(p + '-btn');
+  btn.disabled = true;
+  btn.textContent = 'Opslaan...';
+
+  try {
+    for (const entry of entries) {
+      await api({ action: 'addEntry', ...entry });
+      logs.unshift(entry);
+    }
+    renderAll();
+    // Reset rows
+    container.innerHTML = '';
+    addSetRow(p);
+    showToast(`✓ ${entries.length} set${entries.length > 1 ? 's' : ''} opgeslagen!`);
+  } catch { showToast('Fout bij opslaan. Probeer opnieuw.'); }
+
+  btn.disabled = false;
+  btn.textContent = '💾 Opslaan';
+}
+
+// ── DELETE ENTRY ─────────────────────────────────────────────
+async function deleteEntry(id) {
+  if (!confirm('Weet je zeker dat je deze entry wilt verwijderen?')) return;
+  try {
+    await api({ action: 'deleteEntry', id });
+    logs = logs.filter(e => String(e.id) !== String(id));
+    renderAll();
+    showToast('✓ Entry verwijderd');
+  } catch { showToast('Fout bij verwijderen'); }
+}
+
+// ── RENDER LOG ───────────────────────────────────────────────
+function toggleDateGroup(groupId) {
+  const rows  = document.querySelectorAll('[data-group="' + groupId + '"]');
+  const arrow = document.getElementById('arrow-' + groupId);
+  const isOpen = arrow.classList.toggle('open');
+  rows.forEach(r => r.style.display = isOpen ? '' : 'none');
+}
+
+function renderLog(person) {
+  const p = person === 'miatta' ? 'm' : 'b';
+  const colorVar = person === 'miatta' ? 'miatta' : 'boris';
+  const personLogs = logs.filter(e => e.person === person).sort((a,b) => String(b.date).substring(0,10).localeCompare(String(a.date).substring(0,10)));
+  const tbody = document.getElementById(p + '-tbody');
+  const empty = document.getElementById(p + '-empty');
+  const stats = document.getElementById(p + '-stats');
+
+  tbody.innerHTML = '';
+  if (!personLogs.length) { empty.style.display = 'block'; stats.innerHTML = ''; return; }
+  empty.style.display = 'none';
+
+  const totalVol = personLogs.reduce((s,e) => s + (Number(e.volume)||0), 0);
+  stats.innerHTML = `<div class="stat">Entries: <strong>${personLogs.length}</strong></div><div class="stat">Volume: <strong>${totalVol.toLocaleString()} kg</strong></div>`;
+
+  // Group by date
+  const byDate = {};
+  const dateOrder = [];
+  personLogs.forEach(e => {
+    const d = fmtDate(e.date);
+    if (!byDate[d]) { byDate[d] = []; dateOrder.push(d); }
+    byDate[d].push(e);
+  });
+
+  dateOrder.forEach((date, idx) => {
+    const entries = byDate[date];
+    const groupId = p + '-' + date.replace(/-/g,'');
+    const exNames = [...new Set(entries.map(e => e.exercise))];
+    const summary = exNames.slice(0, 3).join(', ') + (exNames.length > 3 ? ` +${exNames.length - 3}` : '');
+    const isFirst = idx === 0;
+
+    // Header row
+    const htr = document.createElement('tr');
+    htr.style.cursor = 'pointer';
+    htr.style.background = 'var(--s2)';
+    htr.onclick = () => toggleDateGroup(groupId);
+    htr.innerHTML = `
+      <td style="padding:9px 8px;">
+        <span class="date-group-label">${date}</span>
+        <span class="date-group-meta">${entries.length} sets · ${summary}</span>
+      </td>
+      <td colspan="9" style="padding:9px 8px;"></td>
+      <td style="padding:9px 8px;text-align:right;">
+        <span class="date-group-arrow${isFirst ? ' open' : ''}" id="arrow-${groupId}">▶</span>
+      </td>`;
+    tbody.appendChild(htr);
+
+    entries.forEach(e => {
+      const tr = document.createElement('tr');
+      tr.dataset.group = groupId;
+      tr.style.display = isFirst ? '' : 'none';
+      tr.innerHTML = `
+        <td>${fmtDate(e.date)}</td>
+        <td><span class="badge b${colorVar[0]}">${e.cat}</span></td>
+        <td style="font-size:11px">${e.exercise}</td>
+        <td>${e.setNr}</td>
+        <td>${fmt(e.reps)}</td>
+        <td>${fmt(e.weight)}</td>
+        <td class="vol">${fmt(e.volume)}</td>
+        <td>${fmt(e.km)}</td>
+        <td>${fmt(e.min)}</td>
+        <td style="color:var(--muted);font-size:11px;max-width:80px;overflow:hidden;text-overflow:ellipsis">${e.notes || ''}</td>
+        <td><button class="delbtn" onclick="deleteEntry(${e.id})">✕</button></td>`;
+      tbody.appendChild(tr);
+    });
+  });
+}
+
+const ALL_PAGE_SIZE = 10; // 10 date-groups per page
+let allLogsPage = 1;
+
+function renderAllLogs(page) {
+  if (page !== undefined) allLogsPage = page;
+  const tbody = document.getElementById('all-tbody');
+  const empty = document.getElementById('all-empty');
+  const pagination = document.getElementById('all-pagination');
+  tbody.innerHTML = '';
+  pagination.innerHTML = '';
+
+  if (!logs.length) { empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+
+  const sortedLogs = [...logs].sort((a,b) => String(b.date).substring(0,10).localeCompare(String(a.date).substring(0,10)));
+
+  // Group ALL logs by date first
+  const byDate = {};
+  const dateOrder = [];
+  sortedLogs.forEach(e => {
+    const d = fmtDate(e.date);
+    if (!byDate[d]) { byDate[d] = []; dateOrder.push(d); }
+    byDate[d].push(e);
+  });
+
+  const totalPages = Math.ceil(dateOrder.length / ALL_PAGE_SIZE);
+  allLogsPage = Math.max(1, Math.min(allLogsPage, totalPages));
+
+  const startD = (allLogsPage - 1) * ALL_PAGE_SIZE;
+  const pageDates = dateOrder.slice(startD, startD + ALL_PAGE_SIZE);
+
+  // Track overall group index for open/closed state
+  let groupIdx = 0;
+
+  pageDates.forEach((date) => {
+    const allEntries = byDate[date];
+    // Split by person
+    const persons = ['miatta', 'boris'];
+    persons.forEach(person => {
+      const entries = allEntries.filter(e => e.person === person);
+      if (!entries.length) return;
+
+      const isMiatta = person === 'miatta';
+      const personColor = isMiatta ? 'var(--miatta)' : 'var(--boris)';
+      const personLabel = isMiatta ? 'Miatta' : 'Boris';
+      const groupId = 'all-' + person + '-' + date.replace(/-/g,'') + '-p' + allLogsPage;
+      const exNames = [...new Set(entries.map(e => e.exercise))];
+      const summary = exNames.slice(0, 3).join(', ') + (exNames.length > 3 ? ` +${exNames.length - 3}` : '');
+      const isFirst = groupIdx === 0;
+      groupIdx++;
+
+      const htr = document.createElement('tr');
+      htr.style.cursor = 'pointer';
+      htr.style.background = 'var(--s2)';
+      htr.onclick = () => toggleDateGroup(groupId);
+      htr.innerHTML = `
+        <td style="padding:9px 8px;">
+          <span class="date-group-label" style="color:${personColor}">${date}</span>
+          <span style="font-size:10px;font-weight:700;color:${personColor};margin-left:6px;opacity:0.8">${personLabel}</span>
+          <span class="date-group-meta">${entries.length} sets · ${summary}</span>
+        </td>
+        <td colspan="9" style="padding:9px 8px;"></td>
+        <td style="padding:9px 8px;text-align:right;">
+          <span class="date-group-arrow${isFirst ? ' open' : ''}" id="arrow-${groupId}">▶</span>
+        </td>`;
+      tbody.appendChild(htr);
+
+      entries.forEach(e => {
+        const tr = document.createElement('tr');
+        tr.dataset.group = groupId;
+        tr.style.display = isFirst ? '' : 'none';
+        tr.innerHTML = `
+          <td>${fmtDate(e.date)}</td>
+          <td><span class="badge ${isMiatta ? 'bm' : 'bb'}">${personLabel}</span></td>
+          <td>${e.cat}</td>
+          <td style="font-size:11px">${e.exercise}</td>
+          <td>${e.setNr}</td>
+          <td>${fmt(e.reps)}</td>
+          <td>${fmt(e.weight)}</td>
+          <td class="vol">${fmt(e.volume)}</td>
+          <td>${fmt(e.km)}</td>
+          <td>${fmt(e.min)}</td>
+          <td><button class="delbtn" onclick="deleteEntry(${e.id})">✕</button></td>`;
+        tbody.appendChild(tr);
+      });
+    });
+  });
+
+  // Pagination controls
+  if (totalPages <= 1) return;
+
+  const prevBtn = document.createElement('button');
+  prevBtn.className = 'pg-btn';
+  prevBtn.textContent = '←';
+  prevBtn.disabled = allLogsPage === 1;
+  prevBtn.onclick = () => { renderAllLogs(allLogsPage - 1); document.getElementById('tab-both').scrollTop = 0; };
+  pagination.appendChild(prevBtn);
+
+  let startP = Math.max(1, allLogsPage - 2);
+  let endP   = Math.min(totalPages, startP + 4);
+  startP = Math.max(1, endP - 4);
+
+  if (startP > 1) {
+    const dots = document.createElement('span');
+    dots.className = 'pg-info';
+    dots.textContent = '1 …';
+    pagination.appendChild(dots);
+  }
+  for (let i = startP; i <= endP; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'pg-btn' + (i === allLogsPage ? ' active' : '');
+    btn.textContent = i;
+    btn.onclick = (function(p) { return () => { renderAllLogs(p); document.getElementById('tab-both').scrollTop = 0; }; })(i);
+    pagination.appendChild(btn);
+  }
+  if (endP < totalPages) {
+    const dots = document.createElement('span');
+    dots.className = 'pg-info';
+    dots.textContent = `… ${totalPages}`;
+    pagination.appendChild(dots);
+  }
+
+  const nextBtn = document.createElement('button');
+  nextBtn.className = 'pg-btn';
+  nextBtn.textContent = '→';
+  nextBtn.disabled = allLogsPage === totalPages;
+  nextBtn.onclick = () => { renderAllLogs(allLogsPage + 1); document.getElementById('tab-both').scrollTop = 0; };
+  pagination.appendChild(nextBtn);
+
+  const info = document.createElement('span');
+  info.className = 'pg-info';
+  info.textContent = `${startD + 1}–${Math.min(startD + ALL_PAGE_SIZE, dateOrder.length)} van ${dateOrder.length} dagen`;
+  pagination.appendChild(info);
+}
+
+// ── RECORDS ──────────────────────────────────────────────────
+function getBest(person, exercise) {
+  // Returns { weight, reps } for the heaviest set; reps at that weight
+  const entries = logs.filter(e => e.person === person && e.exercise === exercise && Number(e.weight) > 0);
+  if (!entries.length) return null;
+  const maxWeight = Math.max(...entries.map(e => Number(e.weight)));
+  // Among all sets at max weight, take the highest reps
+  const repsAtMax = Math.max(...entries.filter(e => Number(e.weight) === maxWeight).map(e => Number(e.reps) || 0));
+  return { weight: maxWeight, reps: repsAtMax };
+}
+
+function renderRecords() {
+  const tbody = document.getElementById('pr-tbody');
+  tbody.innerHTML = '';
+  CATS.forEach(cat => {
+    const exList = (exercises[cat] || []).slice().sort((a,b) => a.localeCompare(b));
+    const catTr = document.createElement('tr');
+    catTr.className = 'cat-row';
+    catTr.innerHTML = `<td colspan="3">${cat}</td>`;
+    tbody.appendChild(catTr);
+    exList.forEach(ex => {
+      const m = getBest('miatta', ex), b = getBest('boris', ex);
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="font-size:12px">${ex}</td>
+        <td style="font-family:'DM Mono',monospace;font-weight:500;color:${m ? 'var(--miatta)' : 'var(--muted)'}">
+          ${m ? `${m.weight} kg <span style="font-size:10px;opacity:0.7">× ${m.reps} reps</span>` : '—'}
+        </td>
+        <td style="font-family:'DM Mono',monospace;font-weight:500;color:${b ? 'var(--boris)' : 'var(--muted)'}">
+          ${b ? `${b.weight} kg <span style="font-size:10px;opacity:0.7">× ${b.reps} reps</span>` : '—'}
+        </td>`;
+      tbody.appendChild(tr);
+    });
+  });
+}
+
+// ── PROGRESS ─────────────────────────────────────────────────
+function onProgPersonChange() {
+  const person = document.getElementById('prog-person').value;
+  // Populate categories used by this person
+  const usedCats = [...new Set(logs.filter(e => e.person === person).map(e => e.cat))].sort();
+  const catSel = document.getElementById('prog-cat');
+  const prevCat = catSel.value;
+  catSel.innerHTML = '<option value="">Alle</option>' + usedCats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  if (usedCats.includes(prevCat)) catSel.value = prevCat;
+  onProgCatChange();
+}
+
+function onProgCatChange() {
+  const person = document.getElementById('prog-person').value;
+  const cat    = document.getElementById('prog-cat').value;
+  const filtered = logs.filter(e => e.person === person && (!cat || e.cat === cat));
+  const used = [...new Set(filtered.map(e => e.exercise))].sort((a,b) => a.localeCompare(b));
+  const sel = document.getElementById('prog-ex');
+  sel.innerHTML = used.length ? used.map(ex => `<option value="${esc(ex)}">${esc(ex)}</option>`).join('') : '<option>Geen data</option>';
+  renderProgress();
+}
+
+let progChart = null;
+let progChartReps = null;
+
+function renderProgress() {
+  const person   = document.getElementById('prog-person').value;
+  const exercise = document.getElementById('prog-ex').value;
+  const tbody    = document.getElementById('prog-tbody');
+  const empty    = document.getElementById('prog-empty');
+
+
+  // Sort entries oldest→newest for chart, newest first for table
+  const entries = logs
+    .filter(e => e.person === person && e.exercise === exercise && Number(e.weight) > 0)
+    .sort((a,b) => String(a.date).substring(0,10).localeCompare(String(b.date).substring(0,10)));
+
+  tbody.innerHTML = '';
+
+  if (!entries.length) {
+    empty.style.display = 'block';
+    document.getElementById('prog-charts-wrap').style.display = 'none';
+    if (progChart) { progChart.destroy(); progChart = null; }
+    if (progChartReps) { progChartReps.destroy(); progChartReps = null; }
+    return;
+  }
+  empty.style.display = 'none';
+
+  // Table: newest first
+  [...entries].reverse().forEach(e => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${fmtDate(e.date)}</td><td>${e.setNr}</td><td>${fmt(e.reps)}</td><td>${fmt(e.weight)}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  // Per day: highest weight, and reps at that heaviest set
+  const byDay = {};
+  entries.forEach(e => {
+    const d = fmtDate(e.date);
+    const w = Number(e.weight) || 0;
+    if (!byDay[d] || w > byDay[d].weight) {
+      byDay[d] = { weight: w, reps: Number(e.reps) || 0 };
+    }
+  });
+  const labels     = Object.keys(byDay).sort();
+  const dataWeight = labels.map(d => byDay[d].weight);
+  const dataReps   = labels.map(d => byDay[d].reps);
+
+  document.getElementById('prog-charts-wrap').style.display = 'block';
+  if (progChart) { progChart.destroy(); progChart = null; }
+  if (progChartReps) { progChartReps.destroy(); progChartReps = null; }
+
+  const color = person === 'miatta' ? '#ff6b9d' : '#4fc3f7';
+
+  const sharedOptions = (unitLabel, dataColor) => ({
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#1a1a24',
+        borderColor: '#222230',
+        borderWidth: 1,
+        titleColor: '#e8e8f0',
+        bodyColor: dataColor,
+        callbacks: { label: ctx => ctx.parsed.y + ' ' + unitLabel }
+      }
+    },
+    scales: {
+      x: {
+        ticks: { color: '#55556a', font: { family: 'DM Mono', size: 10 }, maxRotation: 45 },
+        grid: { color: '#222230' }
+      },
+      y: {
+        ticks: {
+          color: '#55556a',
+          font: { family: 'DM Mono', size: 10 },
+          callback: v => Math.round(v) + ' ' + unitLabel
+        },
+        grid: { color: '#222230' }
+      }
+    }
+  });
+
+  progChart = new Chart(document.getElementById('prog-chart-weight').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: dataWeight,
+        borderColor: color,
+        backgroundColor: color + '22',
+        borderWidth: 2.5,
+        pointBackgroundColor: color,
+        pointRadius: 5,
+        pointHoverRadius: 7,
+        fill: true,
+        tension: 0.3
+      }]
+    },
+    options: sharedOptions('kg', color)
+  });
+
+  progChartReps = new Chart(document.getElementById('prog-chart-reps').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: dataReps,
+        borderColor: '#c8ff00',
+        backgroundColor: '#c8ff0022',
+        borderWidth: 2.5,
+        pointBackgroundColor: '#c8ff00',
+        pointRadius: 5,
+        pointHoverRadius: 7,
+        fill: true,
+        tension: 0.3
+      }]
+    },
+    options: sharedOptions('reps', '#c8ff00')
+  });
+}
+
+// ── EXERCISES ─────────────────────────────────────────────────
+function renderExercises() {
+  const grid = document.getElementById('ex-grid');
+  grid.innerHTML = '';
+  CATS.forEach(cat => {
+    const exList = (exercises[cat] || []).slice().sort((a,b) => a.localeCompare(b));
+    const div = document.createElement('div');
+    div.className = 'ex-cat';
+    div.innerHTML = `<div class="ex-cat-title">${cat}</div>`;
+    exList.forEach(ex => {
+      const row = document.createElement('div');
+      row.className = 'ex-item';
+      row.innerHTML = `<span style="font-size:12px;flex:1">${ex}</span><button class="delbtn" onclick="removeExercise('${esc(cat)}','${esc(ex)}')">✕</button>`;
+      div.appendChild(row);
+    });
+    const addRow = document.createElement('div');
+    addRow.className = 'ex-add';
+    addRow.innerHTML = `<input type="text" id="newex-${cat}" placeholder="Nieuw..."><button onclick="addExercise('${esc(cat)}')">+</button>`;
+    div.appendChild(addRow);
+    grid.appendChild(div);
+  });
+}
+
+async function addExercise(cat) {
+  const input = document.getElementById('newex-' + cat);
+  const val = input.value.trim();
+  if (!val) return;
+  try {
+    await api({ action: 'addExercise', cat, exercise: val });
+    if (!exercises[cat]) exercises[cat] = [];
+    exercises[cat].push(val);
+    input.value = '';
+    renderExercises();
+    initForms();
+    showToast('Oefening toegevoegd!');
+  } catch { showToast('Fout bij toevoegen'); }
+}
+
+async function removeExercise(cat, exercise) {
+  try {
+    await api({ action: 'deleteExercise', cat, exercise });
+    exercises[cat] = (exercises[cat] || []).filter(e => e !== exercise);
+    renderExercises();
+    initForms();
+    showToast('Oefening verwijderd');
+  } catch { showToast('Fout bij verwijderen'); }
+}
+
+// ── TABS ─────────────────────────────────────────────────────
+const TAB_IDS = ['miatta','boris','both','records','progress','exercises'];
+function showTab(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  document.querySelectorAll('.tab')[TAB_IDS.indexOf(name)].classList.add('active');
+  if (name === 'progress') onProgPersonChange();
+}
+
+// ── TOAST ────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+// ── HELPERS ──────────────────────────────────────────────────
+function fmtDate(d) { return d ? String(d).substring(0, 10) : ""; }
+function fmt(v) { return v ? Number(v).toFixed(2).replace(/\.00$/, "").replace(/(\.[1-9])0$/, "$1") : "—"; }
+function esc(s) { return String(s).replace(/'/g,"&#39;").replace(/"/g,'&quot;'); }
+
+
+// ── PREVIOUS SESSION HINT ────────────────────────────────────
+function showPrevSession(p) {
+  const person   = p === 'm' ? 'miatta' : 'boris';
+  const exercise = document.getElementById(p + '-ex').value;
+  const box      = document.getElementById(p + '-prev-session');
+  const cat      = document.getElementById(p + '-cat').value;
+  const isCardio = cat === 'Cardio';
+
+  if (!exercise) { box.classList.remove('visible'); return; }
+
+  // Find all sessions (unique dates) for this person + exercise, sorted newest first
+  const sessionDates = [...new Set(
+    logs
+      .filter(e => e.person === person && e.exercise === exercise)
+      .map(e => fmtDate(e.date))
+  )].sort((a,b) => b.localeCompare(a));
+
+  if (!sessionDates.length) { box.classList.remove('visible'); return; }
+
+  const lastDate = sessionDates[0];
+  const lastSets = logs
+    .filter(e => e.person === person && e.exercise === exercise && fmtDate(e.date) === lastDate)
+    .sort((a,b) => Number(a.setNr) - Number(b.setNr));
+
+  const color = person === 'miatta' ? 'var(--miatta)' : 'var(--boris)';
+
+  const rows = lastSets.map(s => {
+    if (isCardio) {
+      return `<div class="prev-set-row">
+        <span class="prev-set-nr">Set ${s.setNr}</span>
+        <span class="prev-set-km">${fmt(s.km)} km</span>
+        <span class="prev-set-reps">${fmt(s.min)} min</span>
+      </div>`;
+    }
+    return `<div class="prev-set-row">
+      <span class="prev-set-nr">Set ${s.setNr}</span>
+      <span class="prev-set-kg">${fmt(s.weight)} kg</span>
+      <span class="prev-set-reps">× ${fmt(s.reps)} reps</span>
+      ${s.notes ? `<span style="color:var(--muted);font-size:10px">· ${s.notes}</span>` : ''}
+    </div>`;
+  }).join('');
+
+  box.innerHTML = `
+    <div class="prev-session-title">Vorige sessie</div>
+    <div class="prev-session-date" style="color:${color}">${lastDate}</div>
+    ${rows}`;
+  box.classList.add('visible');
+}
+
+// ── BOOT ─────────────────────────────────────────────────────
+if (SCRIPT_URL) {
+  document.getElementById('configScreen').classList.add('hidden');
+  init();
+} else {
+  document.getElementById('loadingOverlay').classList.add('hidden');
+}
+</script>
+</body>
+</html>
