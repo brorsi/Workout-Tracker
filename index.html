@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="nl">
 <head>
@@ -286,6 +285,12 @@ tr:last-child td { border-bottom: none; }
       <div class="card-title">Log — Miatta</div>
       <div class="stats" id="m-stats"></div>
       <div id="m-streak" style="margin-bottom:10px;"></div>
+      <div class="fg" style="margin-bottom:10px;">
+        <label>Filter op categorie</label>
+        <select id="m-filter-cat" onchange="renderLog('miatta')" style="font-size:12px;padding:7px 10px;">
+          <option value="">Alle categorieën</option>
+        </select>
+      </div>
       <div class="tscroll"><table><thead><tr><th>Datum</th><th>Cat</th><th>Oefening</th><th>Set</th><th>Reps</th><th>Kg</th><th>Vol</th><th>Km</th><th>Min</th><th>📝</th><th></th></tr></thead><tbody id="m-tbody"></tbody></table></div>
       <div class="empty" id="m-empty"><div class="ico">📝</div>Nog geen entries!</div>
     </div>
@@ -307,6 +312,12 @@ tr:last-child td { border-bottom: none; }
       <div class="card-title">Log — Boris</div>
       <div class="stats" id="b-stats"></div>
       <div id="b-streak" style="margin-bottom:10px;"></div>
+      <div class="fg" style="margin-bottom:10px;">
+        <label>Filter op categorie</label>
+        <select id="b-filter-cat" onchange="renderLog('boris')" style="font-size:12px;padding:7px 10px;">
+          <option value="">Alle categorieën</option>
+        </select>
+      </div>
       <div class="tscroll"><table><thead><tr><th>Datum</th><th>Cat</th><th>Oefening</th><th>Set</th><th>Reps</th><th>Kg</th><th>Vol</th><th>Km</th><th>Min</th><th>📝</th><th></th></tr></thead><tbody id="b-tbody"></tbody></table></div>
       <div class="empty" id="b-empty"><div class="ico">📝</div>Nog geen entries!</div>
     </div>
@@ -316,6 +327,12 @@ tr:last-child td { border-bottom: none; }
   <div id="tab-both" class="panel">
     <div class="card">
       <div class="card-title">👥 Alle Logs — Miatta & Boris</div>
+      <div class="fg" style="margin-bottom:10px;">
+        <label>Filter op categorie</label>
+        <select id="all-filter-cat" onchange="renderAllLogs(1)" style="font-size:12px;padding:7px 10px;">
+          <option value="">Alle categorieën</option>
+        </select>
+      </div>
       <div class="tscroll"><table><thead><tr><th>Datum</th><th>Persoon</th><th>Cat</th><th>Oefening</th><th>Set</th><th>Reps</th><th>Kg</th><th>Vol</th><th>Km</th><th>Min</th><th></th></tr></thead><tbody id="all-tbody"></tbody></table></div>
       <div class="empty" id="all-empty"><div class="ico">📝</div>Nog geen entries!</div>
       <div class="pagination" id="all-pagination"></div>
@@ -628,10 +645,20 @@ function toggleDateGroup(groupId) {
 function renderLog(person) {
   const p = person === 'miatta' ? 'm' : 'b';
   const colorVar = person === 'miatta' ? 'miatta' : 'boris';
-  const personLogs = logs.filter(e => e.person === person).sort((a,b) => String(b.date).substring(0,10).localeCompare(String(a.date).substring(0,10)));
+  const allPersonLogs = logs.filter(e => e.person === person).sort((a,b) => String(b.date).substring(0,10).localeCompare(String(a.date).substring(0,10)));
   const tbody = document.getElementById(p + '-tbody');
   const empty = document.getElementById(p + '-empty');
   const stats = document.getElementById(p + '-stats');
+
+  // Populate category filter
+  const filterSel = document.getElementById(p + '-filter-cat');
+  const prevFilter = filterSel.value;
+  const usedCats = [...new Set(allPersonLogs.map(e => e.cat))].sort();
+  filterSel.innerHTML = '<option value="">Alle categorieën</option>' + usedCats.map(c => `<option value="${esc(c)}"${c === prevFilter ? ' selected' : ''}>${c}</option>`).join('');
+
+  // Apply filter
+  const filterCat = filterSel.value;
+  const personLogs = filterCat ? allPersonLogs.filter(e => e.cat === filterCat) : allPersonLogs;
 
   tbody.innerHTML = '';
   if (!personLogs.length) { empty.style.display = 'block'; stats.innerHTML = ''; return; }
@@ -639,7 +666,7 @@ function renderLog(person) {
 
   const totalVol = personLogs.reduce((s,e) => s + (Number(e.volume)||0), 0);
   stats.innerHTML = `<div class="stat">Entries: <strong>${personLogs.length}</strong></div><div class="stat">Volume: <strong>${totalVol.toLocaleString()} kg</strong></div>`;
-  renderStreak(person, personLogs);
+  renderStreak(person, allPersonLogs);
 
   // Group by date
   const byDate = {};
@@ -652,9 +679,10 @@ function renderLog(person) {
 
   dateOrder.forEach((date, idx) => {
     const entries = byDate[date];
-    const groupId = p + '-' + date.replace(/-/g,'');
-    const exNames = [...new Set(entries.map(e => e.exercise))];
-    const summary = exNames.slice(0, 3).join(', ') + (exNames.length > 3 ? ` +${exNames.length - 3}` : '');
+    const groupId = p + '-' + date.replace(/-/g,'') + (filterCat ? '-' + filterCat : '');
+    // Show unique categories instead of exercise names
+    const catNames = [...new Set(entries.map(e => e.cat))];
+    const summary = catNames.join(', ');
     const isFirst = idx === 0;
 
     // Header row
@@ -710,10 +738,20 @@ function renderAllLogs(page) {
 
   const sortedLogs = [...logs].sort((a,b) => String(b.date).substring(0,10).localeCompare(String(a.date).substring(0,10)));
 
-  // Group ALL logs by date first
+  // Populate category filter
+  const filterSel = document.getElementById('all-filter-cat');
+  const prevFilter = filterSel ? filterSel.value : '';
+  const usedCats = [...new Set(sortedLogs.map(e => e.cat))].sort();
+  if (filterSel) {
+    filterSel.innerHTML = '<option value="">Alle categorieën</option>' + usedCats.map(c => `<option value="${esc(c)}"${c === prevFilter ? ' selected' : ''}>${c}</option>`).join('');
+  }
+  const filterCat = filterSel ? filterSel.value : '';
+  const filteredLogs = filterCat ? sortedLogs.filter(e => e.cat === filterCat) : sortedLogs;
+
+  // Group by date + person
   const byDate = {};
   const dateOrder = [];
-  sortedLogs.forEach(e => {
+  filteredLogs.forEach(e => {
     const d = fmtDate(e.date);
     if (!byDate[d]) { byDate[d] = []; dateOrder.push(d); }
     byDate[d].push(e);
@@ -740,8 +778,8 @@ function renderAllLogs(page) {
       const personColor = isMiatta ? 'var(--miatta)' : 'var(--boris)';
       const personLabel = isMiatta ? 'Miatta' : 'Boris';
       const groupId = 'all-' + person + '-' + date.replace(/-/g,'') + '-p' + allLogsPage;
-      const exNames = [...new Set(entries.map(e => e.exercise))];
-      const summary = exNames.slice(0, 3).join(', ') + (exNames.length > 3 ? ` +${exNames.length - 3}` : '');
+      const catNames = [...new Set(entries.map(e => e.cat))];
+      const summary = catNames.join(', ');
       const isFirst = groupIdx === 0;
       groupIdx++;
 
