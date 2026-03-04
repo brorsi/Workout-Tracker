@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="nl">
 <head>
@@ -144,6 +145,22 @@ tr:last-child td { border-bottom: none; }
 .pg-info { font-size: 11px; color: var(--muted); padding: 0 4px; }
 
 
+
+/* PR TOAST */
+.pr-toast { position: fixed; top: 24px; left: 50%; transform: translateX(-50%) translateY(-120px); background: linear-gradient(135deg, #c8ff00, #aadd00); color: #000; padding: 14px 24px; border-radius: 16px; font-weight: 700; font-size: 15px; z-index: 9999; transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1); white-space: nowrap; pointer-events: none; text-align: center; box-shadow: 0 4px 24px rgba(200,255,0,0.35); }
+.pr-toast.show { transform: translateX(-50%) translateY(0); }
+.pr-toast .pr-sub { font-size: 11px; font-weight: 500; opacity: 0.75; margin-top: 2px; }
+
+/* STREAK */
+.streak-bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 4px; }
+.streak-week { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.streak-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border); }
+.streak-dot.done { background: var(--accent); }
+.streak-dot.current { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+.streak-label { font-size: 9px; color: var(--muted); font-family: 'DM Mono', monospace; }
+.streak-count { font-size: 22px; font-weight: 700; font-family: 'DM Mono', monospace; color: var(--accent); }
+.streak-title { font-size: 10px; color: var(--muted); letter-spacing: 0.5px; }
+
 /* PREVIOUS SESSION HINT */
 .prev-session { background: var(--s2); border: 1px solid var(--border); border-radius: 7px; padding: 10px 12px; margin-top: 8px; display: none; }
 .prev-session.visible { display: block; }
@@ -268,6 +285,7 @@ tr:last-child td { border-bottom: none; }
     <div class="card">
       <div class="card-title">Log — Miatta</div>
       <div class="stats" id="m-stats"></div>
+      <div id="m-streak" style="margin-bottom:10px;"></div>
       <div class="tscroll"><table><thead><tr><th>Datum</th><th>Cat</th><th>Oefening</th><th>Set</th><th>Reps</th><th>Kg</th><th>Vol</th><th>Km</th><th>Min</th><th>📝</th><th></th></tr></thead><tbody id="m-tbody"></tbody></table></div>
       <div class="empty" id="m-empty"><div class="ico">📝</div>Nog geen entries!</div>
     </div>
@@ -288,6 +306,7 @@ tr:last-child td { border-bottom: none; }
     <div class="card">
       <div class="card-title">Log — Boris</div>
       <div class="stats" id="b-stats"></div>
+      <div id="b-streak" style="margin-bottom:10px;"></div>
       <div class="tscroll"><table><thead><tr><th>Datum</th><th>Cat</th><th>Oefening</th><th>Set</th><th>Reps</th><th>Kg</th><th>Vol</th><th>Km</th><th>Min</th><th>📝</th><th></th></tr></thead><tbody id="b-tbody"></tbody></table></div>
       <div class="empty" id="b-empty"><div class="ico">📝</div>Nog geen entries!</div>
     </div>
@@ -363,6 +382,7 @@ tr:last-child td { border-bottom: none; }
 </div><!-- end .scroll -->
 
 <div class="toast" id="toast"></div>
+<div class="pr-toast" id="prToast"><div id="prToastMsg"></div><div class="pr-sub" id="prToastSub"></div></div>
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────
@@ -553,15 +573,33 @@ async function saveAllSets(person) {
   btn.textContent = 'Opslaan...';
 
   try {
+    // Check PR before adding new entries
+    const prevBest = logs
+      .filter(e => e.person === person && e.exercise === exercise && Number(e.weight) > 0)
+      .reduce((max, e) => Math.max(max, Number(e.weight)), 0);
+
     for (const entry of entries) {
       await api({ action: 'addEntry', ...entry });
       logs.unshift(entry);
     }
+
+    // Check if any new entry beats the previous best
+    if (!isCardio) {
+      const newBest = entries.reduce((max, e) => Math.max(max, Number(e.weight) || 0), 0);
+      if (newBest > prevBest && newBest > 0) {
+        showPRToast(exercise, newBest);
+      } else {
+        showToast(`✓ ${entries.length} set${entries.length > 1 ? 's' : ''} opgeslagen!`);
+      }
+    } else {
+      showToast(`✓ ${entries.length} set${entries.length > 1 ? 's' : ''} opgeslagen!`);
+    }
+
     renderAll();
     // Reset rows
     container.innerHTML = '';
     addSetRow(p);
-    showToast(`✓ ${entries.length} set${entries.length > 1 ? 's' : ''} opgeslagen!`);
+    showPrevSession(p);
   } catch { showToast('Fout bij opslaan. Probeer opnieuw.'); }
 
   btn.disabled = false;
@@ -601,6 +639,7 @@ function renderLog(person) {
 
   const totalVol = personLogs.reduce((s,e) => s + (Number(e.volume)||0), 0);
   stats.innerHTML = `<div class="stat">Entries: <strong>${personLogs.length}</strong></div><div class="stat">Volume: <strong>${totalVol.toLocaleString()} kg</strong></div>`;
+  renderStreak(person, personLogs);
 
   // Group by date
   const byDate = {};
@@ -1089,6 +1128,84 @@ function showPrevSession(p) {
     <div class="prev-session-date" style="color:${color}">${lastDate}</div>
     ${rows}`;
   box.classList.add('visible');
+}
+
+
+// ── PR TOAST ─────────────────────────────────────────────────
+let prToastTimer;
+function showPRToast(exercise, weight) {
+  const msg = document.getElementById('prToastMsg');
+  const sub = document.getElementById('prToastSub');
+  const el  = document.getElementById('prToast');
+  msg.textContent = '🏆 Nieuw persoonlijk record!';
+  sub.textContent = `${exercise} — ${weight} kg`;
+  el.classList.add('show');
+  clearTimeout(prToastTimer);
+  prToastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+// ── STREAK ───────────────────────────────────────────────────
+function getWeekKey(dateStr) {
+  const d = new Date(dateStr);
+  const jan1 = new Date(d.getFullYear(), 0, 1);
+  const week = Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);
+  return `${d.getFullYear()}-W${String(week).padStart(2,'0')}`;
+}
+
+function renderStreak(person, personLogs) {
+  const el = document.getElementById((person === 'miatta' ? 'm' : 'b') + '-streak');
+  if (!el) return;
+
+  const color = person === 'miatta' ? 'var(--miatta)' : 'var(--boris)';
+
+  // Get all unique weeks with at least 1 training
+  const weeks = [...new Set(personLogs.map(e => getWeekKey(fmtDate(e.date))))].sort();
+  if (!weeks.length) { el.innerHTML = ''; return; }
+
+  // Count current streak (consecutive weeks ending at current/last week)
+  const currentWeek = getWeekKey(new Date().toISOString().split('T')[0]);
+  let streak = 0;
+  // Build set for fast lookup
+  const weekSet = new Set(weeks);
+  // Walk backwards from current week
+  let checkDate = new Date();
+  for (let i = 0; i < 52; i++) {
+    const wk = getWeekKey(checkDate.toISOString().split('T')[0]);
+    if (weekSet.has(wk)) {
+      streak++;
+      checkDate.setDate(checkDate.getDate() - 7);
+    } else if (i === 0) {
+      // Current week not yet trained — start checking from last week
+      checkDate.setDate(checkDate.getDate() - 7);
+    } else {
+      break;
+    }
+  }
+
+  // Show last 12 weeks as dots
+  const dots = [];
+  const dotDate = new Date();
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(dotDate);
+    d.setDate(d.getDate() - i * 7);
+    const wk = getWeekKey(d.toISOString().split('T')[0]);
+    const done = weekSet.has(wk);
+    const isCurrent = wk === currentWeek;
+    const weekNum = wk.split('-W')[1];
+    dots.push(`<div class="streak-week">
+      <div class="streak-dot ${done ? (isCurrent ? 'current' : 'done') : ''}"></div>
+      <div class="streak-label">W${weekNum}</div>
+    </div>`);
+  }
+
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+      <div>
+        <div class="streak-count" style="color:${color}">${streak}</div>
+        <div class="streak-title">week streak 🔥</div>
+      </div>
+      <div class="streak-bar">${dots.join('')}</div>
+    </div>`;
 }
 
 // ── BOOT ─────────────────────────────────────────────────────
