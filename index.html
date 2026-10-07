@@ -88,6 +88,7 @@ const num=v=>{const n=parseFloat(String(v).replace(',','.'));return isNaN(n)?0:n
 const fmt=n=>(Math.round(n*10)/10).toString().replace('.',',');
 const today=()=>new Date().toLocaleDateString('sv');
 const isCardio=c=>String(c).toLowerCase()==='cardio';
+const nd=()=>S.logs.forEach(l=>l.date=String(l.date).slice(0,10));nd();
 const catOf=e=>(S.ex.find(x=>x.exercise===e)||{}).cat||'';
 
 // ---- Netwerk: wachtrij + achtergrond sync ----
@@ -111,7 +112,7 @@ async function refresh(){
   try{
     const j=await (await fetch(URL_+'?action=getAll')).json();
     if(!j.ok)throw new Error(j.error||'Onbekende fout');
-    if(!Q.length){S={logs:j.logs,ex:j.ex,tpl:j.tpl};save();render();dot('ok');lastErr=''}
+    if(!Q.length){S={logs:j.logs,ex:j.ex,tpl:j.tpl};nd();save();render();dot('ok');lastErr=''}
   }catch(e){lastErr=errMsg(e);dot('err')}
 }
 const op=o=>{Q.push(o);save();flush()};
@@ -131,7 +132,14 @@ function stats(person,ex){
   const last=r.map(l=>l.date).sort().pop();
   return{w,v,e,last,sets:r.filter(l=>l.date===last).sort((a,b)=>num(a.setNr)-num(b.setNr))};
 }
-const sd=l=>`${fmt(num(l.reps))} × ${fmt(num(l.weight))} kg`;
+const sd=l=>isCardio(l.cat)?`${fmt(num(l.km))} km · ${fmt(num(l.min))} min`:`${fmt(num(l.reps))} × ${fmt(num(l.weight))} kg`;
+function catLast(c){
+  if(!c)return'';
+  const r=S.logs.filter(l=>l.person===me&&l.cat===c);if(!r.length)return'';
+  const d=r.map(l=>l.date).sort().pop(),g={};
+  r.filter(l=>l.date===d).sort((a,b)=>num(a.setNr)-num(b.setNr)).forEach(l=>(g[l.exercise]=g[l.exercise]||[]).push(l));
+  return`<div class="mut" style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px">Laatste ${esc(c)}-training (${esc(d)})`+Object.keys(g).map(e=>`<div>${esc(e)}: ${g[e].map(sd).join(', ')}</div>`).join('')+'</div>';
+}
 
 // ---- Invoer ----
 function fillSelect(){
@@ -144,13 +152,12 @@ function fillSelect(){
 function renderIn(){
   const ex=$('#exSel').value,cat=catOf(ex),cardio=isCardio(cat);
   $('#inRow').innerHTML=cardio?'<input id="i1" inputmode="decimal" placeholder="km"><input id="i2" inputmode="decimal" placeholder="min">':'<input id="i1" inputmode="numeric" placeholder="Reps"><input id="i2" inputmode="decimal" placeholder="Gewicht (kg)">';
-  const st=ex&&!cardio?stats(me,ex):null,box=$('#stats');
-  if(!ex)box.innerHTML='';
-  else if(!st)box.innerHTML=`<div class="mut">${cardio?'Cardio: vul km en minuten in.':'Nog geen data voor '+esc(me)+'.'}</div>`;
+  const st=ex&&!cardio?stats(me,ex):null,box=$('#stats'),cl=catLast($('#catSel').value);
+  if(!ex)box.innerHTML=cl;
+  else if(!st)box.innerHTML=`<div class="mut">${cardio?'Cardio: vul km en minuten in.':'Nog geen data voor '+esc(me)+'.'}</div>`+cl;
   else{
     box.innerHTML=`<div class="stats"><div><b>${fmt(num(st.w.weight))} kg</b><span>Zwaarst · ${fmt(num(st.w.reps))} reps</span></div><div><b>${fmt(num(st.v.weight)*num(st.v.reps))}</b><span>Beste volume · ${sd(st.v)}</span></div><div><b>${fmt(st.e)} kg</b><span>Geschat 1RM</span></div></div>
-    <div class="mut" style="margin-top:10px">Vorige keer (${esc(st.last)}): ${st.sets.map(sd).join(', ')}</div>`;
-    const f=st.sets[0];$('#i1').value=num(f.reps);$('#i2').value=fmt(num(f.weight)).replace(',','.');
+    <div class="mut" style="margin-top:10px">Vorige keer (${esc(st.last)}): ${st.sets.map(sd).join(', ')}</div>`+cl;
   }
   $('#tplChips').innerHTML=(S.tpl.some(t=>t.person===me)&&draft.use?draft.use.map(e=>`<button class="chip" data-pick="${esc(e)}">${esc(e)}</button>`).join(''):'');
   renderPend();
