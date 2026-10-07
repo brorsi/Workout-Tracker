@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>Workout</title>
+<style>
+:root{--bg:#000;--card:#161618;--line:#2a2a2d;--txt:#f2f2f4;--mut:#8e8e93;--btn:#3a3a3d;--pri:#d8d8dc;--red:#ff6b61}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{padding:calc(env(safe-area-inset-top) + 10px) 14px calc(84px + env(safe-area-inset-bottom))}
+header{display:flex;gap:10px;align-items:center;margin-bottom:12px}
+.seg{flex:1;display:flex;background:var(--card);border-radius:12px;padding:3px}
+.seg button{flex:1;padding:10px;border:0;border-radius:10px;background:none;color:var(--mut);font:600 16px inherit}
+.seg button.on{background:var(--btn);color:var(--txt)}
+#dot{width:10px;height:10px;border-radius:50%;background:#555}
+#dot.ok{background:#8e8e93}#dot.sync{background:#d8d8dc;animation:p 1s infinite}#dot.err{background:var(--red)}
+@keyframes p{50%{opacity:.3}}
+.card{background:var(--card);border-radius:14px;padding:14px;margin-bottom:12px}
+h2{font-size:15px;margin:0 0 8px;color:var(--mut);font-weight:600}
+select,input{width:100%;font:16px inherit;color:var(--txt);background:#0c0c0d;border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:8px}
+.row{display:flex;gap:8px}.row>*{flex:1;min-width:0}
+button.b{border:0;border-radius:10px;padding:13px;background:var(--btn);color:var(--txt);font:600 16px inherit;width:100%}
+button.b.p{background:var(--pri);color:#000}
+button:active{opacity:.7}
+.x{border:0;background:none;color:var(--mut);font-size:20px;padding:4px 8px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+.stats b{display:block;font-size:20px}.stats span{font-size:12px;color:var(--mut)}
+.item{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-top:1px solid var(--line)}
+.item:first-child{border-top:0}
+.mut{color:var(--mut);font-size:14px}
+.chips{display:flex;gap:6px;overflow-x:auto;margin-bottom:10px}
+.chip{flex:none;border:0;border-radius:99px;padding:8px 14px;background:var(--btn);color:var(--txt);font:15px inherit}
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:#0a0a0b;border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;padding:14px 0;border:0;background:none;color:var(--mut);font:600 13px inherit}
+nav button.on{color:var(--txt)}
+.pg{display:none}.pg.on{display:block}
+.empty{color:var(--mut);text-align:center;padding:20px 0}
+</style>
+</head>
+<body>
+<header>
+  <div class="seg"><button data-me="boris">Boris</button><button data-me="miatta">Miatta</button></div>
+  <div id="dot"></div>
+</header>
+
+<section class="pg on" id="p-in">
+  <div id="tplChips" class="chips"></div>
+  <div class="card">
+    <select id="exSel"></select>
+    <div id="stats"></div>
+  </div>
+  <div class="card">
+    <div class="row" id="inRow"></div>
+    <button class="b" id="addSet">+ Set toevoegen</button>
+  </div>
+  <div class="card" id="pend"></div>
+</section>
+
+<section class="pg" id="p-log"></section>
+<section class="pg" id="p-rec"></section>
+<section class="pg" id="p-tpl"></section>
+<section class="pg" id="p-ex"></section>
+
+<nav>
+  <button data-pg="in" class="on">Invoer</button><button data-pg="log">Log</button><button data-pg="rec">Records</button><button data-pg="tpl">Templates</button><button data-pg="ex">Oefeningen</button>
+</nav>
+
+<script>
+// ---- Config ----
+const U_KEY='wt_url';
+let URL_=localStorage.getItem(U_KEY)||'';
+if(!URL_){URL_=(prompt('Plak de Apps Script web-app URL:')||'').trim();if(URL_)localStorage.setItem(U_KEY,URL_)}
+
+// ---- State (lokaal gecached = direct zichtbaar) ----
+const ld=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}};
+let S=ld('wt_s',{logs:[],ex:[],tpl:[]}),Q=ld('wt_q',[]),P=ld('wt_p',[]);
+let me=localStorage.getItem('wt_me')||'boris',pg='in',draft={name:'',items:[]};
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const save=()=>{localStorage.wt_s=JSON.stringify(S);localStorage.wt_q=JSON.stringify(Q);localStorage.wt_p=JSON.stringify(P)};
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num=v=>{const n=parseFloat(String(v).replace(',','.'));return isNaN(n)?0:n};
+const fmt=n=>(Math.round(n*10)/10).toString().replace('.',',');
+const today=()=>new Date().toLocaleDateString('sv');
+const isCardio=c=>String(c).toLowerCase()==='cardio';
+const catOf=e=>(S.ex.find(x=>x.exercise===e)||{}).cat||'';
+
+// ---- Netwerk: wachtrij + achtergrond sync ----
+const dot=c=>$('#dot').className=c;
+let busy=false;
+async function flush(){
+  if(busy)return;busy=true;dot('sync');
+  try{
+    while(Q.length){
+      const r=await fetch(URL_,{method:'POST',body:JSON.stringify(Q[0])});
+      const j=await r.json();if(!j.ok)throw new Error(j.error);
+      Q.shift();save();
+    }
+    dot('ok');
+  }catch(e){dot('err')}
+  busy=false;
+}
+async function refresh(){
+  if(!URL_||Q.length)return;
+  try{
+    const j=await (await fetch(URL_)).json();
+    if(j.ok&&!Q.length){S={logs:j.logs,ex:j.ex,tpl:j.tpl};save();render()}
+  }catch(e){dot('err')}
+}
+const op=o=>{Q.push(o);save();flush()};
+async function sync(){await flush();await refresh()}
+
+// ---- Statistieken per persoon + oefening ----
+function stats(person,ex){
+  const r=S.logs.filter(l=>l.person===person&&l.exercise===ex);
+  if(!r.length)return null;
+  let w=null,v=null,e=0;
+  r.forEach(l=>{
+    const wt=num(l.weight),rp=num(l.reps),vol=wt*rp;
+    if(!w||wt>num(w.weight)||(wt===num(w.weight)&&rp>num(w.reps)))w=l;
+    if(!v||vol>num(v.weight)*num(v.reps))v=l;
+    e=Math.max(e,rp<=1?wt:wt*(1+rp/30));
+  });
+  const last=r.map(l=>l.date).sort().pop();
+  return{w,v,e,last,sets:r.filter(l=>l.date===last).sort((a,b)=>num(a.setNr)-num(b.setNr))};
+}
+const sd=l=>`${fmt(num(l.reps))} × ${fmt(num(l.weight))} kg`;
+
+// ---- Invoer ----
+function fillSelect(){
+  const sel=$('#exSel'),cur=sel.value,g={};
+  S.ex.forEach(x=>(g[x.cat]=g[x.cat]||[]).push(x.exercise));
+  sel.innerHTML='<option value="">Kies een oefening…</option>'+Object.keys(g).map(c=>`<optgroup label="${esc(c)}">${g[c].map(e=>`<option>${esc(e)}</option>`).join('')}</optgroup>`).join('');
+  sel.value=cur;
+}
+function renderIn(){
+  const ex=$('#exSel').value,cat=catOf(ex),cardio=isCardio(cat);
+  $('#inRow').innerHTML=cardio?'<input id="i1" inputmode="decimal" placeholder="km"><input id="i2" inputmode="decimal" placeholder="min">':'<input id="i1" inputmode="numeric" placeholder="Reps"><input id="i2" inputmode="decimal" placeholder="Gewicht (kg)">';
+  const st=ex&&!cardio?stats(me,ex):null,box=$('#stats');
+  if(!ex)box.innerHTML='';
+  else if(!st)box.innerHTML=`<div class="mut">${cardio?'Cardio: vul km en minuten in.':'Nog geen data voor '+esc(me)+'.'}</div>`;
+  else{
+    box.innerHTML=`<div class="stats"><div><b>${fmt(num(st.w.weight))} kg</b><span>Zwaarst · ${fmt(num(st.w.reps))} reps</span></div><div><b>${fmt(num(st.v.weight)*num(st.v.reps))}</b><span>Beste volume · ${sd(st.v)}</span></div><div><b>${fmt(st.e)} kg</b><span>Geschat 1RM</span></div></div>
+    <div class="mut" style="margin-top:10px">Vorige keer (${esc(st.last)}): ${st.sets.map(sd).join(', ')}</div>`;
+    const f=st.sets[0];$('#i1').value=num(f.reps);$('#i2').value=fmt(num(f.weight)).replace(',','.');
+  }
+  $('#tplChips').innerHTML=(S.tpl.some(t=>t.person===me)&&draft.use?draft.use.map(e=>`<button class="chip" data-pick="${esc(e)}">${esc(e)}</button>`).join(''):'');
+  renderPend();
+}
+function renderPend(){
+  const l=P.map((p,i)=>({...p,i})).filter(p=>p.person===me);
+  $('#pend').innerHTML=l.length?`<h2>Nog op te slaan (${l.length})</h2>`+l.map(p=>`<div class="item"><div>${esc(p.exercise)}<div class="mut">${p.cardio?fmt(p.km)+' km · '+fmt(p.min)+' min':fmt(p.reps)+' × '+fmt(p.weight)+' kg'}</div></div><button class="x" data-rm="${p.i}">✕</button></div>`).join('')+'<button class="b p" id="saveAll" style="margin-top:10px">Alles opslaan</button>':'<div class="mut">Voeg sets toe en sla ze in één keer op.</div>';
+}
+function addSet(){
+  const ex=$('#exSel').value;if(!ex)return alert('Kies eerst een oefening.');
+  const cat=catOf(ex),cardio=isCardio(cat),a=num($('#i1').value),b=num($('#i2').value);
+  if(!a&&!b)return;
+  P.push(cardio?{person:me,exercise:ex,cat,cardio:1,km:a,min:b}:{person:me,exercise:ex,cat,reps:a,weight:b});
+  save();renderPend();
+}
+function saveAll(){
+  const mine=P.filter(p=>p.person===me),d=today(),n={},rows=[];
+  mine.forEach((p,i)=>{
+    const k=p.exercise;
+    if(n[k]===undefined)n[k]=S.logs.filter(l=>l.person===me&&l.exercise===k&&l.date===d).length;
+    n[k]++;
+    rows.push({id:String(Date.now()+i),person:me,date:d,cat:p.cat,exercise:k,setNr:n[k],reps:p.reps||0,weight:p.weight||0,volume:Math.round((p.reps||0)*(p.weight||0)*100)/100,km:p.km||0,min:p.min||0,notes:''});
+  });
+  S.logs.push(...rows);P=P.filter(p=>p.person!==me);save();
+  op({action:'addSets',rows});render();
+}
+
+// ---- Overige pagina's ----
+function renderLog(){
+  const r=S.logs.filter(l=>l.person===me).sort((a,b)=>(b.date+b.id).localeCompare(a.date+a.id)).slice(0,300),g={};
+  r.forEach(l=>(g[l.date]=g[l.date]||[]).push(l));
+  $('#p-log').innerHTML=Object.keys(g).map(d=>`<div class="card"><h2>${esc(d)}</h2>${g[d].map(l=>`<div class="item"><div>${esc(l.exercise)}<div class="mut">${isCardio(l.cat)?fmt(num(l.km))+' km · '+fmt(num(l.min))+' min':sd(l)}</div></div><button class="x" data-del="${esc(l.id)}">✕</button></div>`).join('')}</div>`).join('')||'<div class="empty">Nog geen workouts.</div>';
+}
+function renderRec(q=''){
+  const names=[...new Set(S.logs.filter(l=>l.person===me&&!isCardio(l.cat)).map(l=>l.exercise))].filter(e=>e.toLowerCase().includes(q.toLowerCase())).sort();
+  const g={};names.forEach(e=>(g[catOf(e)||'Overig']=g[catOf(e)||'Overig']||[]).push(e));
+  $('#p-rec').innerHTML=`<input id="recQ" placeholder="Zoek oefening…" value="${esc(q)}">`+(Object.keys(g).sort().map(c=>`<div class="card"><h2>${esc(c)}</h2>${g[c].map(e=>{const s=stats(me,e);return`<div class="item"><div>${esc(e)}<div class="mut">Zwaarst ${sd(s.w)} · Volume ${fmt(num(s.v.weight)*num(s.v.reps))} · 1RM ${fmt(s.e)}</div></div></div>`}).join('')}</div>`).join('')||'<div class="empty">Geen records.</div>');
+  const i=$('#recQ');i.oninput=()=>{const p=i.selectionStart;renderRec(i.value);const n=$('#recQ');n.focus();n.setSelectionRange(p,p)};
+}
+function renderTpl(){
+  const mine=S.tpl.filter(t=>t.person===me),g={};
+  mine.forEach(t=>(g[t.name]=g[t.name]||[]).push(t.exercise));
+  const opts='<option value="">Oefening toevoegen…</option>'+S.ex.map(x=>`<option>${esc(x.exercise)}</option>`).join('');
+  $('#p-tpl').innerHTML=`<div class="card"><h2>Nieuw template</h2><input id="tName" placeholder="Naam (bijv. Push)" value="${esc(draft.name)}"><select id="tSel">${opts}</select>${draft.items.map((e,i)=>`<div class="item"><div>${esc(e)}</div><button class="x" data-tdel="${i}">✕</button></div>`).join('')}<button class="b p" id="tSave" style="margin-top:8px">Template opslaan</button></div>`+
+  Object.keys(g).map(n=>`<div class="card"><h2>${esc(n)}</h2><div class="mut">${g[n].map(esc).join(' · ')}</div><div class="row" style="margin-top:10px"><button class="b" data-use="${esc(n)}">Gebruiken</button><button class="b" data-tx="${esc(n)}">Verwijderen</button></div></div>`).join('');
+}
+function renderEx(){
+  const cats=[...new Set(S.ex.map(x=>x.cat))],g={};
+  S.ex.forEach(x=>(g[x.cat]=g[x.cat]||[]).push(x.exercise));
+  $('#p-ex').innerHTML=`<div class="card"><h2>Oefening toevoegen</h2><select id="eCat">${cats.map(c=>`<option>${esc(c)}</option>`).join('')}<option value="__new">+ Nieuwe categorie…</option></select><input id="eNewCat" placeholder="Naam nieuwe categorie" style="display:none"><input id="eName" placeholder="Naam oefening"><button class="b p" id="eAdd">Toevoegen</button></div>`+
+  cats.map(c=>`<div class="card"><h2>${esc(c)}</h2>${g[c].map(e=>`<div class="item"><div>${esc(e)}</div><button class="x" data-exdel="${esc(c)}|${esc(e)}">✕</button></div>`).join('')}</div>`).join('');
+  $('#eCat').onchange=e=>$('#eNewCat').style.display=e.target.value==='__new'?'block':'none';
+}
+function render(){
+  $$('[data-me]').forEach(b=>b.classList.toggle('on',b.dataset.me===me));
+  fillSelect();
+  ({in:renderIn,log:renderLog,rec:()=>renderRec(),tpl:renderTpl,ex:renderEx})[pg]();
+}
+
+// ---- Events (delegatie = weinig code, snel) ----
+document.addEventListener('click',e=>{
+  const t=e.target.closest('button');if(!t)return;const d=t.dataset;
+  if(d.me){me=d.me;localStorage.wt_me=me;return render()}
+  if(d.pg){pg=d.pg;$$('.pg').forEach(x=>x.classList.toggle('on',x.id==='p-'+pg));$$('nav button').forEach(b=>b.classList.toggle('on',b===t));return render()}
+  if(t.id==='addSet')return addSet();
+  if(t.id==='saveAll')return saveAll();
+  if(d.rm){P.splice(+d.rm,1);save();return renderPend()}
+  if(d.pick){$('#exSel').value=d.pick;return renderIn()}
+  if(d.del){if(!confirm('Set verwijderen?'))return;S.logs=S.logs.filter(l=>String(l.id)!==d.del);save();op({action:'deleteLogs',ids:[d.del]});return renderLog()}
+  if(d.tdel){draft.items.splice(+d.tdel,1);return renderTpl()}
+  if(t.id==='tSave'){
+    const name=$('#tName').value.trim();if(!name||!draft.items.length)return alert('Geef een naam en kies oefeningen.');
+    S.tpl=S.tpl.filter(x=>!(x.person===me&&x.name===name));
+    const items=draft.items.map(x=>({cat:catOf(x),exercise:x}));
+    items.forEach(i=>S.tpl.push({person:me,name,...i}));
+    op({action:'saveTemplate',person:me,name,items});draft={name:'',items:[]};save();return renderTpl()}
+  if(d.use){draft.use=S.tpl.filter(x=>x.person===me&&x.name===d.use).map(x=>x.exercise);$$('nav button')[0].click();return}
+  if(d.tx){if(!confirm('Template verwijderen?'))return;S.tpl=S.tpl.filter(x=>!(x.person===me&&x.name===d.tx));save();op({action:'deleteTemplate',person:me,name:d.tx});return renderTpl()}
+  if(t.id==='eAdd'){
+    let c=$('#eCat').value;if(c==='__new')c=$('#eNewCat').value.trim();
+    const n=$('#eName').value.trim();if(!c||!n)return alert('Vul categorie en naam in.');
+    if(S.ex.some(x=>x.exercise.toLowerCase()===n.toLowerCase()))return alert('Deze oefening bestaat al.');
+    S.ex.push({cat:c,exercise:n});save();op({action:'addExercise',cat:c,exercise:n});return renderEx()}
+  if(d.exdel){const[c,n]=d.exdel.split('|');if(!confirm(`"${n}" verwijderen? Je oude logs blijven bewaard.`))return;S.ex=S.ex.filter(x=>!(x.cat===c&&x.exercise===n));save();op({action:'deleteExercise',cat:c,exercise:n});return renderEx()}
+});
+document.addEventListener('change',e=>{
+  if(e.target.id==='exSel')renderIn();
+  if(e.target.id==='tSel'&&e.target.value){draft.name=$('#tName').value;draft.items.push(e.target.value);renderTpl()}
+});
+
+// ---- Start: eerst cache tonen, dan op de achtergrond syncen ----
+render();
+if(URL_){sync();document.addEventListener('visibilitychange',()=>{if(!document.hidden)sync()})}
+</script>
+</body>
+</html>
