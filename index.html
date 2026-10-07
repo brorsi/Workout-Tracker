@@ -51,6 +51,7 @@ nav button.on{color:var(--txt)}
 <section class="pg on" id="p-in">
   <div id="tplChips" class="chips"></div>
   <div class="card">
+    <select id="catSel"></select>
     <select id="exSel"></select>
     <div id="stats"></div>
   </div>
@@ -91,7 +92,8 @@ const catOf=e=>(S.ex.find(x=>x.exercise===e)||{}).cat||'';
 
 // ---- Netwerk: wachtrij + achtergrond sync ----
 const dot=c=>$('#dot').className=c;
-let busy=false;
+let busy=false,lastErr='';
+const errMsg=e=>e instanceof SyntaxError?'Geen geldig antwoord van het script. Controleer: URL eindigt op /exec, toegang staat op Iedereen, en je hebt een NIEUWE VERSIE geïmplementeerd.':String(e.message||e);
 async function flush(){
   if(busy)return;busy=true;dot('sync');
   try{
@@ -101,15 +103,16 @@ async function flush(){
       Q.shift();save();
     }
     dot('ok');
-  }catch(e){dot('err')}
+  }catch(e){lastErr=errMsg(e);dot('err')}
   busy=false;
 }
 async function refresh(){
   if(!URL_||Q.length)return;
   try{
-    const j=await (await fetch(URL_)).json();
-    if(j.ok&&!Q.length){S={logs:j.logs,ex:j.ex,tpl:j.tpl};save();render()}
-  }catch(e){dot('err')}
+    const j=await (await fetch(URL_+'?action=getAll')).json();
+    if(!j.ok)throw new Error(j.error||'Onbekende fout');
+    if(!Q.length){S={logs:j.logs,ex:j.ex,tpl:j.tpl};save();render();dot('ok');lastErr=''}
+  }catch(e){lastErr=errMsg(e);dot('err')}
 }
 const op=o=>{Q.push(o);save();flush()};
 async function sync(){await flush();await refresh()}
@@ -132,10 +135,11 @@ const sd=l=>`${fmt(num(l.reps))} × ${fmt(num(l.weight))} kg`;
 
 // ---- Invoer ----
 function fillSelect(){
-  const sel=$('#exSel'),cur=sel.value,g={};
-  S.ex.forEach(x=>(g[x.cat]=g[x.cat]||[]).push(x.exercise));
-  sel.innerHTML='<option value="">Kies een oefening…</option>'+Object.keys(g).map(c=>`<optgroup label="${esc(c)}">${g[c].map(e=>`<option>${esc(e)}</option>`).join('')}</optgroup>`).join('');
-  sel.value=cur;
+  const cs=$('#catSel'),es=$('#exSel'),cc=cs.value,ce=es.value,cats=[...new Set(S.ex.map(x=>x.cat))];
+  cs.innerHTML='<option value="">Kies categorie…</option>'+cats.map(c=>`<option>${esc(c)}</option>`).join('');
+  cs.value=cc;
+  es.innerHTML='<option value="">Kies oefening…</option>'+S.ex.filter(x=>x.cat===cs.value).map(x=>`<option>${esc(x.exercise)}</option>`).join('');
+  es.value=ce;
 }
 function renderIn(){
   const ex=$('#exSel').value,cat=catOf(ex),cardio=isCardio(cat);
@@ -214,7 +218,7 @@ document.addEventListener('click',e=>{
   if(t.id==='addSet')return addSet();
   if(t.id==='saveAll')return saveAll();
   if(d.rm){P.splice(+d.rm,1);save();return renderPend()}
-  if(d.pick){$('#exSel').value=d.pick;return renderIn()}
+  if(d.pick){$('#catSel').value=catOf(d.pick);fillSelect();$('#exSel').value=d.pick;return renderIn()}
   if(d.del){if(!confirm('Set verwijderen?'))return;S.logs=S.logs.filter(l=>String(l.id)!==d.del);save();op({action:'deleteLogs',ids:[d.del]});return renderLog()}
   if(d.tdel){draft.items.splice(+d.tdel,1);return renderTpl()}
   if(t.id==='tSave'){
@@ -233,12 +237,14 @@ document.addEventListener('click',e=>{
   if(d.exdel){const[c,n]=d.exdel.split('|');if(!confirm(`"${n}" verwijderen? Je oude logs blijven bewaard.`))return;S.ex=S.ex.filter(x=>!(x.cat===c&&x.exercise===n));save();op({action:'deleteExercise',cat:c,exercise:n});return renderEx()}
 });
 document.addEventListener('change',e=>{
+  if(e.target.id==='catSel'){fillSelect();renderIn()}
   if(e.target.id==='exSel')renderIn();
   if(e.target.id==='tSel'&&e.target.value){draft.name=$('#tName').value;draft.items.push(e.target.value);renderTpl()}
 });
 
 // ---- Start: eerst cache tonen, dan op de achtergrond syncen ----
 render();
+$('#dot').onclick=()=>{if(lastErr)alert('Fout: '+lastErr);const u=(prompt('Apps Script URL (eindigt op /exec):',URL_)||'').trim();if(u){URL_=u;localStorage.setItem(U_KEY,u);sync()}};
 if(URL_){sync();document.addEventListener('visibilitychange',()=>{if(!document.hidden)sync()})}
 </script>
 </body>
